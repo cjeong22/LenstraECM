@@ -1,54 +1,13 @@
 import multiprocessing
 import random
+import time
 
+# Setting a maximum bound
 MAX_LENGTH = 1 << 62
-def power(x, y, p) :
- 
-    res = 1 # Initialize result 
-    x = x % p # Update x if it is more 
-              # than or equal to p 
- 
-    while (y > 0): 
-         
-        # If y is odd, multiply x with result 
-        if (y & 1):
-            res = (res * x) % p 
- 
-        # y must be even now 
-        y = y >> 1 # y = y/2 
-        x = (x * x) % p 
- 
-    return res 
- 
-# Returns true if square root of n under
-# modulo p exists. Assumption: p is of the
-# form 3*i + 4 where i >= 1 
-def squareRoot(n, p): 
- 
-    if (p % 4 != 3) : 
-        print( "Invalid Input" )
-        return
- 
- 
-    # Try "+(n^((p + 1)/4))" 
-    n = n % p 
-    x = power(n, (p + 1) // 4, p) 
-    if ((x * x) % p == n): 
-        print( "Square root is ", x) 
-        return
- 
-    # Try "-(n ^ ((p + 1)/4))" 
-    x = p - x 
-    if ((x * x) % p == n): 
-        print( "Square root is ", x )
-        return
- 
-    # If none of the above two work, then 
-    # square root doesn't exist 
-    print( "Square root doesn't exist " )
-class InvError(Exception):
+class InversionError(Exception):
   def __init__(self, v):
     self.value = v
+
 # # an implementation of the extended euclidean algorithm
 def extended_euclidean(a, b):
   if a == 0:
@@ -75,7 +34,7 @@ def modpow(a,n,m):
     n = -n
   return helper(a, n, m)
 
-# # this function gets the the inverse of x mod p.
+# an implementation of modular inversion
 def get_inverse(x : int, p : int):
   def extended_ea(a : int, b: int ):
     if a == 0 :
@@ -85,49 +44,14 @@ def get_inverse(x : int, p : int):
       return gcd, y - (b//a) * x, x
   gcd, x_inv, _ = extended_ea(x, p)
   if (gcd > 1 and gcd < x):
-    raise InvError(gcd) 
+    raise InversionError(gcd) 
   x_inv = x_inv % (p)
   return x_inv
 
-# ec_add is now in the form of P = (x, z)
-# P, Q: Points to add 
-# A, B: elliptic curve parameters
-# p: prime 
-# diff P - Q
-# def double(P, A, p):
-#   x_P = P[0]
-#   z_P = P[1]
-#   x_res = ((x_P ** 2 - z_P ** 2) ** 2) % p
-#   z_res = (4 * x_P * z_P * (x_P ** 2 + z_P ** 2 + A*x_P*z_P)) % p
-#   return (x_res, z_res)
-# def ec_add(P,Q,A,p,diff):
-#   # better caching
-#   x_P = P[0]
-#   z_P = P[1]
-#   x_Q = Q[0]
-#   z_Q = Q[1]
-
-#   u = ((x_P + z_P) * (x_Q - z_Q)) % p
-#   v = ((x_P - z_P) * (x_Q + z_Q)) % p
-#   w = ((u + v) ** 2) % p
-#   t = ((u - v) ** 2) % p 
-#   x_res = (diff[1] * w) % p 
-#   z_res = (diff[0] * t) % p
-#   return (x_res, z_res) 
-    
-# def ec_mult(n,P,A,p):
-#   res = P
-#   temp = double(P, A, p)
-#   while n > 0:
-#     if (n & 1):
-#       res = ec_add(res, temp, A, p, P)
-#       temp = double(P, A, p) # just pass in P for doubling, doesn't matter
-#     else:
-#       temp = ec_add(temp, res, A, p, P)
-#       res = double(res, A, p)
-#     n = n >> 1
-#  return res
-# use the sieve of eratosthenes to keep generating primes until we get the nth one
+# A variant of the sieve of eratosthenes: we generate primes until we reach the nth one 
+# Similar to prime_power, we cache the primes as a keyword argument so that we don't
+# need to continually recompute primes.
+# For example, sieve_of_eratosthenes(1) = 2, sieve_of_eratosthenes(2) = 3, etc. 
 def sieve_of_eratosthenes(n, *, primes = [2, 3]):
   while len(primes) <= n:
     for i in range(primes[-1] + 2, MAX_LENGTH, 2):
@@ -143,23 +67,28 @@ def sieve_of_eratosthenes(n, *, primes = [2, 3]):
         break
   return primes[n]
 
-def prime_power(idx, bound, *, cache = {}):
-  bound2 = 100*bound
-  if bound not in cache:
+# prime_power computes the maximal power of the nth prime that is less than bound.
+# For example, prime_power(0, 10) => 8, prime_power(0, 17) => 16, prime_power(1, 200) -> 125
+# This is the how we precompute primes for stage 2! All calls to prime_power manipulate the 
+# same dp dictionary, so we do not have to reperform any expensive computations. 
+def prime_power(n, bound, *, dp = {}): # computes the idxth prime power up to bound
+  if bound not in dp:
     r = []
     for i in range(MAX_LENGTH):
-      p = sieve_of_eratosthenes(i)
-      if p >= bound:
+      p = sieve_of_eratosthenes(i) # get the ith prime using the sieve of eratosthenes
+      if p >= bound: # if we;ve exceeded our bound, we're done
         break
       m = p
       while True:
-        m2 = m * p # get powers up to a bound 
-        if m2 >= bound2:
+        m2 = m * p # get prime powers up to the bound 
+        if m2 >= bound:
           break
         m = m2
-      r.append(m)
-    cache[bound] = r
-  return cache[bound][idx] if idx < len(cache[bound]) else None
+      r.append(m) #append this prime power to our dict
+    dp[bound] = r
+  return dp[bound][n] if n < len(dp[bound]) else None
+
+# ec_add adds points P and Q on the elliptic curve.
 def ec_add(P,Q,A,p):
     if (Q == 0):
         return P
@@ -174,6 +103,8 @@ def ec_add(P,Q,A,p):
     x_3 = (modpow(lmda, 2, p) - Q[0] - P[0]) % p
     y_3 = (lmda * (P[0] - x_3) - P[1]) % p
     return (x_3, y_3)
+
+# ec_mult returns nP, where P is a point on the elliptic curve
 def ec_mult(n,P,A,p):
     temp = 0
     while n > 0:
@@ -183,52 +114,37 @@ def ec_mult(n,P,A,p):
         n = n >> 1
     return temp
 
+# The bulk of Lenstra ECM.
 def ecm_proc(N, bound, shared):
   bound2= bound * 100 # by convention, feel free to change
   try:
-    # Suyama's parametrization
     random.seed(random.randrange(1 << 48))
-    # sigma = random.randrange(6, N - 1)
-    # u = (sigma*sigma - 5) % N
-    # v = (4 * sigma) % N
-    # x_0 = u**3 % N 
-    # z_0 = v**3 % N 
-    # temp_inv = get_inverse(4 * (u**3) * v, N)
-    # A = (((v - u) ** 3) * (3*u + v) * temp_inv - 2) % N 
-    x0, y0, A = [random.randrange(1, N) for i in range(3)]
-    # x0 = 2; y0 = 3
-    B = (y0 ** 2 - x0 ** 3 - A * x0) % N
+    x0, y0, A = [random.randrange(1, N) for _ in range(3)]
     P = (x0, y0)
-    # P = (x_0, z_0)
-    # stage 1
-    for i in range(bound):
-      if shared.get('found_factor', False):
-        return {'ex': 'finished, joining'}
+    for i in range(MAX_LENGTH):
+      if shared.get(0, False):
+        return {}
       k = prime_power(i, bound)
       if k is None:
         break
       P = ec_mult(k, P, A, N)
     # stage 2
-    running_total = 1 
-    for i in range(bound, bound2):
-      if shared.get('found_factor', False):
-        return {'ex': 'finished, joining'}
+    for i in range(MAX_LENGTH):
+      if shared.get(0, False):
+        return {}
       if k is None:
         break
-      k = prime_power(i, bound)
-      Q = ec_mult(k, P, A, N)
-      running_total = (running_total * Q[1]) % N
-      get_inverse(running_total, N)
-      P = Q
+      k = prime_power(i, bound2)
+      P = ec_mult(k, P, A, N)
     return {}
-  except InvError as e:
+  except InversionError as e:
     d = e.value
     if d != N:
-      shared['found_factor'] = True
-      return {'factors': [d, N // d]}
+      shared[0] = True
+      return {1: [d, N // d]}
   except BaseException:
-    shared['found_factor'] = True
-    return {'ex': 'finished, joining'}
+    shared[0] = True
+    return {}
   return {}
 
 def ecm(n):
@@ -257,22 +173,36 @@ def ecm(n):
                 temp.append(e)
                 continue
               e = e.get()
-              if 'factors' in e:
-                return e['factors']
+              if 1 in e:
+                return e[1]
             proc_retvals = temp
       except BaseException:
         pass 
       finally:
-        dct['found_factor'] = True
+        dct[0] = True
         pool.close()
         pool.join()
     return [n]
 
 def main():
   print("System info: running on " + str(multiprocessing.cpu_count()) + " cores")
-  N = int(input("Enter an integer to be factored: "))
+  print("Type \"quit\" to quit")
+  N = 0
+  while True:
+    try:
+      _input = input("Enter an integer to be factored: ")
+      if (_input == 'quit'):
+        print("Quitting")
+        return
+      N = int(_input)
+      break
+    except ValueError:
+      print("Please input an integer")
+  start = time.time()
   fs = ecm(N)
+  end = time.time()
   print(fs)
+  print("Time taken: " + str(end-start))
   print("done!")
 
 if __name__ == '__main__':
