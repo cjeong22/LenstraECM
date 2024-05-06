@@ -142,10 +142,11 @@ def ecm_proc(N, bound, shared):
     if d != N:
       shared[0] = True
       return {1: [d, N // d]}
+    return {}
   except BaseException:
     shared[0] = True
     return {}
-  return {}
+  
 
 def ecm(n):
     processes = multiprocessing.cpu_count()
@@ -156,6 +157,10 @@ def ecm(n):
     #   bound = 11000
     # elif length < 25:
     #   bound = 50000
+    # elif length < 30:
+    #   bound = 250000
+    # elif length < 35:
+    #   bound = 1000000
     # else:
     #   bound = 25000000000
     bound = 11000
@@ -166,7 +171,9 @@ def ecm(n):
         proc_retvals = []
         for _ in range(MAX_LENGTH):
           proc_retvals.append(pool.apply_async(ecm_proc, (n, bound, dct)))
-          while len(proc_retvals) >= processes * processes:
+          if len(proc_retvals) < processes * 9:
+            continue
+          while len(proc_retvals) >= processes * 6:
             temp = []
             for e in proc_retvals:
               if not e.ready():
